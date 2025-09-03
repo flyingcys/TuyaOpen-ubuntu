@@ -88,11 +88,19 @@ if(CONFIG_ENABLE_WIFI)
 endif()
 
 if(CONFIG_ENABLE_BLUETOOTH)
-    file(GLOB_RECURSE BT_SRC "tuyaos_adapter/src/tkl_bt/*.c")
+    file(GLOB_RECURSE BT_SRC "tuyaos_adapter/src/tkl_bt/bluez_inc/binc/*.c")
+    list(APPEND BT_SRC 
+        "tuyaos_adapter/src/tkl_bt/tkl_bt.c"
+        "tuyaos_adapter/src/tkl_bt/bt_dbus_api.c"
+    )
+
     set(BLUETOOTH_INC)
     list(APPEND BLUETOOTH_INC
-    "${CMAKE_SOURCE_DIR}/tuyaos_adapter/include/bluetooth"
-    "${CMAKE_SOURCE_DIR}/tuyaos_adapter/src/tkl_bt/include"
+        "${CMAKE_SOURCE_DIR}/tuyaos_adapter/src/tkl_bt/bluez_inc/binc"
+        /usr/include/glib-2.0
+        /usr/lib/x86_64-linux-gnu/glib-2.0/include
+        /usr/include/dbus-1.0
+        /usr/lib/x86_64-linux-gnu/dbus-1.0/include
     )
 endif()
 
@@ -187,3 +195,19 @@ endif()
 
 # Link math library after all other libraries to resolve dependencies
 target_link_libraries(${CONFIG_PROJECT_NAME} m)
+
+if(CONFIG_ENABLE_BLUETOOTH)
+    # Use pkg-config to find GLib and GIO libraries
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GLIB REQUIRED glib-2.0 gio-2.0)
+    
+    target_link_libraries(${CONFIG_PROJECT_NAME}
+        -L${TUYAOS_LIB_DIR}
+        tuyaos
+        dbus-1
+        ${GLIB_LIBRARIES}
+    )
+    
+    # Add GLib compile flags
+    target_compile_options(${CONFIG_PROJECT_NAME} PRIVATE ${GLIB_CFLAGS})
+endif()

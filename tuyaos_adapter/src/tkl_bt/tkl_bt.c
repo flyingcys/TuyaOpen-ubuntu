@@ -6,10 +6,28 @@
  *
  */
 #include "tkl_bluetooth.h"
-#include "bluetooth_api.h"
 
-static BOOL_T is_sd_bus_init = FALSE;
-static BOOL_T is_hci_dev_up  = FALSE;
+static TKL_BLE_GAP_EVT_FUNC_CB  __gap_evt_cb  = NULL;
+static TKL_BLE_GATT_EVT_FUNC_CB __gatt_evt_cb = NULL;
+
+static uint16_t tuya_conn_handle ={0};
+
+static void tuya_gap_init_callback(void)
+{
+    TKL_BLE_GAP_PARAMS_EVT_T event;
+
+    memset(&event, 0, SIZEOF(TKL_BLE_GAP_PARAMS_EVT_T));
+
+    event.result = 0;
+    event.type = TKL_BLE_EVT_STACK_INIT;
+    event.conn_handle            = tuya_conn_handle;//BLE_CONN_HANDLE;
+                                                    //
+    event.gap_event.connect.role = TKL_BLE_ROLE_SERVER;
+
+    if (__gap_evt_cb) {
+        __gap_evt_cb(&event);
+    }
+}
 
 /**
  * @brief   Function for initializing the ble stack
@@ -19,16 +37,13 @@ static BOOL_T is_hci_dev_up  = FALSE;
  * @return  SUCCESS             Initialized successfully.
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_stack_init(uint8_t role)
+OPERATE_RET tkl_ble_stack_init(uint8_t role)
 {
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_BLE_INIT_FAILED;
-        }
-    }
+    printf("tkl_ble_stack_init, role=%d\n",role);
 
+    bluez_inc_init(__gap_evt_cb, __gatt_evt_cb);
+
+    tuya_gap_init_callback();
     return OPRT_OK;
 }
 
@@ -40,15 +55,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_stack_init(uint8_t role)
  * @return  SUCCESS             Deinitialized successfully.
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_stack_deinit(uint8_t role)
+OPERATE_RET tkl_ble_stack_deinit(uint8_t role)
 {
-    if (is_hci_dev_up == TRUE) {
-        if (OPRT_OK == hci_dev_down()) {
-            is_hci_dev_up = FALSE;
-        } else {
-            return OPRT_OS_ADAPTER_BLE_DEINIT_FAILED;
-        }
-    }
+    printf("tkl_ble_stack_deinit, role=%d\n",role);
+    bluez_inc_deinit();
 
     return OPRT_OK;
 }
@@ -59,9 +69,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_stack_deinit(uint8_t role)
  * @return  SUCCESS             Support Gatt Link
  *          ERROR               Only Beacon or Mesh Beacon, Not Support Gatt Link.
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_stack_gatt_link(uint16_t *p_link)
+OPERATE_RET tkl_ble_stack_gatt_link(uint16_t *p_link)
 {
-    *p_link = 1;
+    printf("tkl_ble_stack_gatt_link\n");   
 
     return OPRT_OK;
 }
@@ -72,9 +82,11 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_stack_gatt_link(uint16_t *p_link)
  * @return  SUCCESS         Register successfully.
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_callback_register(const TKL_BLE_GAP_EVT_FUNC_CB gap_evt)
+OPERATE_RET tkl_ble_gap_callback_register(const TKL_BLE_GAP_EVT_FUNC_CB gap_evt)
 {
-    return hci_dev_gap_callback_register(gap_evt);
+    printf("tkl_ble_gap_callback_register\n");      
+    __gap_evt_cb = gap_evt;
+    return OPRT_OK;
 }
 
 /**
@@ -83,9 +95,11 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_callback_register(const TKL_BLE_GAP_
  * @return  SUCCESS         Register successfully.
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatt_callback_register(const TKL_BLE_GATT_EVT_FUNC_CB gatt_evt)
+OPERATE_RET tkl_ble_gatt_callback_register(const TKL_BLE_GATT_EVT_FUNC_CB gatt_evt)
 {
-    return sd_bus_gatt_callback_register(gatt_evt);
+    printf("tkl_ble_gatt_callback_register\n");      
+    __gatt_evt_cb = gatt_evt;
+    return OPRT_OK;
 }
 
 /******************************************************************************************************************************/
@@ -99,9 +113,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatt_callback_register(const TKL_BLE_GAT
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_addr_set(TKL_BLE_GAP_ADDR_T const *p_peer_addr)
+OPERATE_RET tkl_ble_gap_addr_set(TKL_BLE_GAP_ADDR_T const *p_peer_addr)
 {
-    return OPRT_NOT_SUPPORTED;
+    printf("tkl_ble_gap_addr_set\n");
+    return OPRT_OK;
 }
 
 /**
@@ -110,18 +125,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_addr_set(TKL_BLE_GAP_ADDR_T const *p
  * @return  SUCCESS             Set Address successfully.
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_address_get(TKL_BLE_GAP_ADDR_T *p_peer_addr)
+OPERATE_RET tkl_ble_gap_address_get(TKL_BLE_GAP_ADDR_T *p_peer_addr)
 {
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-    p_peer_addr->type = TKL_BLE_GAP_ADDR_TYPE_PUBLIC;
-
-    return hci_dev_get_addr(p_peer_addr->addr);
+    printf("tkl_ble_gap_address_get\n");
+    return OPRT_OK;
 }
 
 /**
@@ -130,22 +137,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_address_get(TKL_BLE_GAP_ADDR_T *p_pe
  * @return  SUCCESS
  *  ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_adv_start(TKL_BLE_GAP_ADV_PARAMS_T const *p_adv_params)
+OPERATE_RET tkl_ble_gap_adv_start(TKL_BLE_GAP_ADV_PARAMS_T const *p_adv_params)
 {
-    OPERATE_RET op_ret = OPRT_OK;
-
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-
-    IF_FAIL_RETURN(hci_dev_set_advertise_enable(FALSE));
-    IF_FAIL_RETURN(hci_dev_set_adv_parameters(p_adv_params));
-
-    return hci_dev_set_advertise_enable(TRUE);
+   printf("tkl_ble_gap_adv_start\n"); 
+    return OPRT_OK;
 }
 
 /**
@@ -154,17 +149,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_adv_start(TKL_BLE_GAP_ADV_PARAMS_T c
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_adv_stop(void)
+OPERATE_RET tkl_ble_gap_adv_stop(void)
 {
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-
-    return hci_dev_set_advertise_enable(FALSE);
+    printf("tkl_ble_gap_adv_stop\n");
+    return OPRT_OK;
 }
 
 /**
@@ -175,25 +163,28 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_adv_stop(void)
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_adv_rsp_data_set(TKL_BLE_DATA_T const *p_adv, TKL_BLE_DATA_T const *p_scan_rsp)
+OPERATE_RET tkl_ble_gap_adv_rsp_data_set(TKL_BLE_DATA_T const *p_adv, TKL_BLE_DATA_T const *p_scan_rsp)
 {
-    OPERATE_RET op_ret = OPRT_OK;
-
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
+    printf("tkl_ble_gap_adv_rsp_data_set\n"); 
+    
+    if (p_adv != NULL && p_adv->p_data != NULL && p_adv->length > 0) {
+        printf("------------------ Advertising Data ------------------\n");
+        // PR_HEXDUMP_DEBUG("Advertising Data", p_adv->p_data, p_adv->length);
+    } else {
+        printf("------------------ Advertising Data ------------------\n");
+        printf("Advertising data is NULL or empty.");
     }
 
-    if (p_adv != NULL) {
-        IF_FAIL_RETURN(hci_dev_set_adv_data(p_adv));
+    if (p_scan_rsp != NULL && p_scan_rsp->p_data != NULL && p_scan_rsp->length > 0) {
+        printf("----------------- Scan Response Data -----------------\n");
+        // PR_HEXDUMP_DEBUG("Scan Response Data", p_scan_rsp->p_data, p_scan_rsp->length);
+    } else {
+        printf("----------------- Scan Response Data -----------------\n");
+        printf("Scan response data is NULL or empty.\n");
     }
 
-    if (p_scan_rsp != NULL) {
-        IF_FAIL_RETURN(hci_dev_set_scan_rsp_data(p_scan_rsp));
-    }
+    bluez_inc_update_adv(p_adv, p_scan_rsp);
+    //bluez_inc_set_adv();
 
     return OPRT_OK;
 }
@@ -206,24 +197,24 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_adv_rsp_data_set(TKL_BLE_DATA_T cons
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_adv_rsp_data_update(TKL_BLE_DATA_T const *p_adv, TKL_BLE_DATA_T const *p_scan_rsp)
+OPERATE_RET tkl_ble_gap_adv_rsp_data_update(TKL_BLE_DATA_T const *p_adv, TKL_BLE_DATA_T const *p_scan_rsp)
 {
-    OPERATE_RET op_ret = OPRT_OK;
+    printf("tkl_ble_gap_adv_rsp_data_update\n");
 
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
+    if (p_adv != NULL && p_adv->p_data != NULL && p_adv->length > 0) {
+        printf("------------------ Advertising Data ------------------\n");
+        // PR_HEXDUMP_INFO("Advertising Data", p_adv->p_data, p_adv->length);
+    } else {
+        printf("------------------ Advertising Data ------------------\n");
+        printf("Advertising data is NULL or empty.\n");
     }
 
-    if (p_adv != NULL) {
-        IF_FAIL_RETURN(hci_dev_set_adv_data(p_adv));
-    }
-
-    if (p_scan_rsp != NULL) {
-        IF_FAIL_RETURN(hci_dev_set_scan_rsp_data(p_scan_rsp));
+    if (p_scan_rsp != NULL && p_scan_rsp->p_data != NULL && p_scan_rsp->length > 0) {
+        printf("----------------- Scan Response Data -----------------\n");
+        // PR_HEXDUMP_INFO("Scan Response Data", p_scan_rsp->p_data, p_scan_rsp->length);
+    } else {
+        printf("----------------- Scan Response Data -----------------\n");
+        printf("Scan response data is NULL or empty.\n");
     }
 
     return OPRT_OK;
@@ -235,21 +226,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_adv_rsp_data_update(TKL_BLE_DATA_T c
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_scan_start(TKL_BLE_GAP_SCAN_PARAMS_T const *p_scan_params)
+OPERATE_RET tkl_ble_gap_scan_start(TKL_BLE_GAP_SCAN_PARAMS_T const *p_scan_params)
 {
-    OPERATE_RET op_ret = OPRT_OK;
-
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-
-    IF_FAIL_RETURN(hci_dev_set_scan_parameters(p_scan_params));
-
-    return hci_dev_set_scan_enable(TRUE);
+    printf("tkl_ble_gap_scan_start\n");
+    return OPRT_OK;
 }
 
 /**
@@ -258,17 +238,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_scan_start(TKL_BLE_GAP_SCAN_PARAMS_T
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_scan_stop(void)
+OPERATE_RET tkl_ble_gap_scan_stop(void)
 {
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-
-    return hci_dev_set_scan_enable(FALSE);
+    printf("tkl_ble_gap_scan_stop\n");
+    return OPRT_OK;
 }
 
 /**
@@ -279,17 +252,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_scan_stop(void)
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_connect(TKL_BLE_GAP_ADDR_T const *p_peer_addr, TKL_BLE_GAP_SCAN_PARAMS_T const *p_scan_params, TKL_BLE_GAP_CONN_PARAMS_T const *p_conn_params)
+OPERATE_RET tkl_ble_gap_connect(TKL_BLE_GAP_ADDR_T const *p_peer_addr, TKL_BLE_GAP_SCAN_PARAMS_T const *p_scan_params, TKL_BLE_GAP_CONN_PARAMS_T const *p_conn_params)
 {
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-
-    return hci_dev_create_conn(p_peer_addr, p_scan_params, p_conn_params);
+    printf("tkl_ble_gap_connect\n");
+    return OPRT_OK;
 }
 
 /**
@@ -299,17 +265,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_connect(TKL_BLE_GAP_ADDR_T const *p_
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_disconnect(uint16_t conn_handle, uint8_t hci_reason)
+OPERATE_RET tkl_ble_gap_disconnect(uint16_t conn_handle, uint8_t hci_reason)
 {
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-
-    return hci_dev_disconnect(conn_handle, hci_reason);
+    printf("tkl_ble_gap_disconnect\n");
+    return OPRT_OK;
 }
 
 /**
@@ -319,17 +278,10 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_disconnect(uint16_t conn_handle, uin
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_conn_param_update(uint16_t conn_handle, TKL_BLE_GAP_CONN_PARAMS_T const *p_conn_params)
+OPERATE_RET tkl_ble_gap_conn_param_update(uint16_t conn_handle, TKL_BLE_GAP_CONN_PARAMS_T const *p_conn_params)
 {
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-
-    return hci_dev_conn_update(conn_handle, p_conn_params);
+    printf("tkl_ble_gap_conn_param_update\n");
+    return OPRT_OK;
 }
 
 /**
@@ -344,8 +296,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_conn_param_update(uint16_t conn_hand
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_tx_power_set(uint8_t role, int tx_power)
+OPERATE_RET tkl_ble_gap_tx_power_set(uint8_t role, int tx_power)
 {
+    printf("tkl_ble_gap_tx_power_set\n");
     return OPRT_NOT_SUPPORTED;
 }
 
@@ -355,147 +308,102 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_tx_power_set(uint8_t role, int tx_po
  * @return  SUCCESS             Successfully read the RSSI.
  *          ERROR               No sample is available.
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gap_rssi_get(uint16_t conn_handle)
+OPERATE_RET tkl_ble_gap_rssi_get(uint16_t conn_handle)
 {
-    OPERATE_RET op_ret = OPRT_OK;
-
-    if (is_hci_dev_up == FALSE) {
-        if (OPRT_OK == hci_dev_up()) {
-            is_hci_dev_up = TRUE;
-        } else {
-            return OPRT_OS_ADAPTER_COM_ERROR;
-        }
-    }
-
-    IF_FAIL_RETURN(hci_dev_read_rssi(conn_handle));
-
+    printf("tkl_ble_gap_rssi_get\n");
     return OPRT_OK;
 }
 
-/******************************************************************************************************************************/
-/** @brief Define All Gatt Server Interface
- *
- *  Notes: notice the handle will be the one of signed point.
- */
 /**
- * @brief   Add Ble Gatt Service
- * @param   [in] p_service: define the ble service
- *  For Example:/
- *  static TKL_BLE_GATTS_PARAMS_T       tkl_ble_gatt_service;
- *  static TKL_BLE_SERVICE_PARAMS_T     tkl_ble_common_service[TKL_BLE_GATT_SERVICE_MAX_NUM];
- *  static TKL_BLE_CHAR_PARAMS_T        tkl_ble_common_char[TKL_BLE_GATT_CHAR_MAX_NUM];
- *
- *  static TAL_BLE_EVT_FUNC_CB          tkl_tal_ble_event_callback;
- *
- *  static void tkl_ble_kernel_gap_event_callback(TKL_BLE_GAP_PARAMS_EVT_T *p_event)
- *  {
- *  }
- *
- *  static void tkl_ble_kernel_gatt_event_callback(TKL_BLE_GATT_PARAMS_EVT_T *p_event)
- *  {
- *  }
- *
-
- *
-     OPERATE_RET tal_ble_bt_init(TAL_BLE_ROLE_E role, const TAL_BLE_EVT_FUNC_CB ble_event)
-     {
-         uint8_t ble_stack_role = TKL_BLE_ROLE_SERVER;
-
-         // Init Bluetooth Stack Role For Ble.
-         if((role&TAL_BLE_ROLE_PERIPERAL) == TAL_BLE_ROLE_PERIPERAL || (role&TAL_BLE_ROLE_BEACON) == TAL_BLE_ROLE_BEACON) {
-             ble_stack_role |= TKL_BLE_ROLE_SERVER;
-         }
-         if((role&TAL_BLE_ROLE_CENTRAL) == TAL_BLE_ROLE_CENTRAL) {
-             ble_stack_role |= TKL_BLE_ROLE_CLIENT;
-         }
-
-         tkl_ble_stack_init(ble_stack_role);
-
-         if(role == TAL_BLE_ROLE_PERIPERAL) {
-             TKL_BLE_GATTS_PARAMS_T *p_ble_services = &tkl_ble_gatt_service;
-             *p_ble_services = (TKL_BLE_GATTS_PARAMS_T) {
-                 .svc_num    = TAL_COMMON_SERVICE_MAX_NUM,
-                 .p_service  = tkl_ble_common_service,
-             };
-
-             // Add Service
-             TKL_BLE_SERVICE_PARAMS_T *p_ble_common_service = tkl_ble_common_service;
-             *(p_ble_common_service + TAL_COMMON_SERVICE_INDEX) = (TKL_BLE_SERVICE_PARAMS_T){
-                 .handle     = TKL_BLE_GATT_INVALID_HANDLE,
-                 .svc_uuid   = {
-                     .uuid_type   = TKL_BLE_UUID_TYPE_16,
-                     .uuid.uuid16 = TAL_BLE_CMD_SERVICE_UUID_V2,
-                 },
-                 .type       = TKL_BLE_UUID_SERVICE_PRIMARY,
-                 .char_num   = TAL_COMMON_CHAR_MAX_NUM,
-                 .p_char     = tkl_ble_common_char,
-             };
-
-             // Add Write Characteristic
-             TKL_BLE_CHAR_PARAMS_T *p_ble_common_char = tkl_ble_common_char;
-
-             *(p_ble_common_char + TAL_COMMON_WRITE_CHAR_INDEX) = (TKL_BLE_CHAR_PARAMS_T){
-                 .handle = TKL_BLE_GATT_INVALID_HANDLE,
-                 .char_uuid  = {
-                     .uuid_type   = TKL_BLE_UUID_TYPE_16,
-                     .uuid.uuid16 = TAL_BLE_CMD_WRITE_CHAR_UUID_V2,
-                 },
-                 .property   = TKL_BLE_GATT_CHAR_PROP_WRITE | TKL_BLE_GATT_CHAR_PROP_WRITE_NO_RSP,
-                 .permission = TKL_BLE_GATT_PERM_READ | TKL_BLE_GATT_PERM_WRITE,
-                 .value_len  = 244,
-             };
-
-             // Add Notify Characteristic
-             *(p_ble_common_char + TAL_COMMON_NOTIFY_CHAR_INDEX) = (TKL_BLE_CHAR_PARAMS_T){
-                 .handle = TKL_BLE_GATT_INVALID_HANDLE,
-                 .char_uuid  = {
-                     .uuid_type   = TKL_BLE_UUID_TYPE_16,
-                     .uuid.uuid16 = TAL_BLE_CMD_NOTIFY_CHAR_UUID_V2,
-                 },
-                 .property   = TKL_BLE_GATT_CHAR_PROP_NOTIFY,
-                 .permission = TKL_BLE_GATT_PERM_READ | TKL_BLE_GATT_PERM_WRITE,
-                 .value_len  = 244,
-             };
-
-             // Add Read Characteristic
-             *(p_ble_common_char + TAL_COMMON_READ_CHAR_INDEX) = (TKL_BLE_CHAR_PARAMS_T){
-                 .handle = TKL_BLE_GATT_INVALID_HANDLE,
-                 .char_uuid  = {
-                     .uuid_type   = TKL_BLE_UUID_TYPE_16,
-                     .uuid.uuid16 = TAL_BLE_CMD_READ_CHAR_UUID_V2,
-                 },
-                 .property   = TKL_BLE_GATT_CHAR_PROP_READ,
-                 .permission = TKL_BLE_GATT_PERM_READ,
-                 .value_len  = 244,
-             };
-
-             if(tkl_ble_gatts_service_add(p_ble_services) != 0) {
-                 return -1; // Invalid Paramters.
-             }
-         }
-
-         // Get the TAL Event Callback.
-         tal_ble_event_callback = ble_event;
-
-         // Register GAP And GATT Callback
-         tkl_ble_gap_callback_register(&tkl_ble_kernel_gap_event_callback);
-         tkl_ble_gatt_callback_register(&tkl_ble_kernel_gatt_event_callback);
-
-         return 0;
-     }
+ * @brief   Add a GATT service.
+ * @param   [in] p_service:    service parameters
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_service_add(TKL_BLE_GATTS_PARAMS_T *p_service)
+OPERATE_RET tkl_ble_gap_name_set(char *p_name)
 {
-    OPERATE_RET op_ret = OPRT_OK;
+    printf("tkl_ble_gap_name_set\n");
+    return OPRT_OK;
+}
 
-    if (FALSE == is_sd_bus_init) {
-        IF_FAIL_RETURN(sd_bus_init());
-        is_sd_bus_init = TRUE;
+/**
+ * @brief   Add Ble Gatt Service
+ * @param   [in] p_service: define the ble service
+ *
+ * @return  SUCCESS
+ *          ERROR
+ * */ 
+OPERATE_RET tkl_ble_gatts_service_add(TKL_BLE_GATTS_PARAMS_T *p_service)
+{
+#if 1  // LOG
+    printf("tkl_ble_gatts_service_add\n");
+    printf("svc_num=%d\n", p_service->svc_num);
+    
+    // 遍历每一个服务
+    for (int i = 0; i < p_service->svc_num; i++) {
+        TKL_BLE_SERVICE_PARAMS_T *p_svc = &(p_service->p_service[i]);
+        
+        printf("-------------------- Service[%d] --------------------\n", i);
+        printf("handle = 0x%x", p_svc->handle);
+        
+        // 根据 UUID 类型打印服务 UUID
+        switch (p_svc->svc_uuid.uuid_type) {
+            case TKL_BLE_UUID_TYPE_16:
+                printf("svc_uuid = 0x%04x (16-bit)\n", p_svc->svc_uuid.uuid.uuid16);
+                break;
+            case TKL_BLE_UUID_TYPE_32:
+                printf("svc_uuid = 0x%08x (32-bit)\n", p_svc->svc_uuid.uuid.uuid32);
+                break;
+            case TKL_BLE_UUID_TYPE_128:
+                printf("svc_uuid = %02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x (128-bit LE)\n",
+                            p_svc->svc_uuid.uuid.uuid128[15], p_svc->svc_uuid.uuid.uuid128[14], p_svc->svc_uuid.uuid.uuid128[13], p_svc->svc_uuid.uuid.uuid128[12],
+                            p_svc->svc_uuid.uuid.uuid128[11], p_svc->svc_uuid.uuid.uuid128[10],
+                            p_svc->svc_uuid.uuid.uuid128[9], p_svc->svc_uuid.uuid.uuid128[8],
+                            p_svc->svc_uuid.uuid.uuid128[7], p_svc->svc_uuid.uuid.uuid128[6],
+                            p_svc->svc_uuid.uuid.uuid128[5], p_svc->svc_uuid.uuid.uuid128[4], p_svc->svc_uuid.uuid.uuid128[3], p_svc->svc_uuid.uuid.uuid128[2], p_svc->svc_uuid.uuid.uuid128[1], p_svc->svc_uuid.uuid.uuid128[0]);
+                break;
+            default:
+                printf("svc_uuid = Unknown UUID Type\n");
+                break;
+        }
+
+        printf("type = 0x%x\n", p_svc->type);
+        printf("char_num = %d\n", p_svc->char_num);
+
+        // 遍历当前服务下的每一个特征值
+        for (int j = 0; j < p_svc->char_num; j++) {
+            TKL_BLE_CHAR_PARAMS_T *p_char = &(p_svc->p_char[j]);
+            
+            printf("    -------------------- Char[%d] --------------------\n", j);
+            printf("    handle = 0x%x\n", p_char->handle);
+            
+            // 根据 UUID 类型打印特征值 UUID
+            switch (p_char->char_uuid.uuid_type) {
+                case TKL_BLE_UUID_TYPE_16:
+                    printf("    char_uuid = 0x%04x (16-bit)\n", p_char->char_uuid.uuid.uuid16);
+                    break;
+                case TKL_BLE_UUID_TYPE_32:
+                    printf("    char_uuid = 0x%08x (32-bit)\n", p_char->char_uuid.uuid.uuid32);
+                    break;
+                case TKL_BLE_UUID_TYPE_128:
+                    printf("    char_uuid = %02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x (128-bit LE)\n",
+                                p_char->char_uuid.uuid.uuid128[15], p_char->char_uuid.uuid.uuid128[14], p_char->char_uuid.uuid.uuid128[13], p_char->char_uuid.uuid.uuid128[12],
+                                p_char->char_uuid.uuid.uuid128[11], p_char->char_uuid.uuid.uuid128[10],
+                                p_char->char_uuid.uuid.uuid128[9], p_char->char_uuid.uuid.uuid128[8],
+                                p_char->char_uuid.uuid.uuid128[7], p_char->char_uuid.uuid.uuid128[6],
+                                p_char->char_uuid.uuid.uuid128[5], p_char->char_uuid.uuid.uuid128[4], p_char->char_uuid.uuid.uuid128[3], p_char->char_uuid.uuid.uuid128[2], p_char->char_uuid.uuid.uuid128[1], p_char->char_uuid.uuid.uuid128[0]);
+                    break;
+                default:
+                    printf("    char_uuid = Unknown UUID Type\n");
+                    break;
+            }
+            printf("    property = 0x%x\n", p_char->property);
+            printf("    permission = 0x%x\n", p_char->permission);
+            printf("    value_len = %d\n", p_char->value_len);
+        }
     }
-
-    return sd_bus_gatts_service_add(p_service);
+#endif
+    bluez_inc_add_gatt(p_service);
 }
 
 /**
@@ -508,16 +416,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_service_add(TKL_BLE_GATTS_PARAMS_T
  *
  * @note Values other than system attributes can be set at any time, regardless of whether any active connections exist.
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_value_set(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
+OPERATE_RET tkl_ble_gatts_value_set(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
 {
-    OPERATE_RET op_ret = OPRT_OK;
-
-    if (FALSE == is_sd_bus_init) {
-        IF_FAIL_RETURN(sd_bus_init());
-        is_sd_bus_init = TRUE;
-    }
-
-    return sd_bus_gatts_value_set(conn_handle, char_handle, p_data, length);
+    return OPRT_OK;
 }
 
 /**
@@ -527,7 +428,7 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_value_set(uint16_t conn_handle, ui
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_value_get(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
+OPERATE_RET tkl_ble_gatts_value_get(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
 {
     return OPRT_OK;
 }
@@ -541,9 +442,8 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_value_get(uint16_t conn_handle, ui
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_value_notify(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
+OPERATE_RET tkl_ble_gatts_value_notify(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
 {
-    return sd_bus_gatts_value_notify(conn_handle, char_handle, p_data, length);
 }
 
 /**
@@ -555,8 +455,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_value_notify(uint16_t conn_handle,
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_value_indicate(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
+OPERATE_RET tkl_ble_gatts_value_indicate(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
 {
+    printf("tkl_ble_gatts_value_indicate\n");
     return OPRT_OK;
 }
 
@@ -567,8 +468,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_value_indicate(uint16_t conn_handl
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_exchange_mtu_reply(uint16_t conn_handle, uint16_t server_rx_mtu)
+OPERATE_RET tkl_ble_gatts_exchange_mtu_reply(uint16_t conn_handle, uint16_t server_rx_mtu)
 {
+    printf("tkl_ble_gatts_exchange_mtu_reply\n");
     return OPRT_OK;
 }
 
@@ -585,8 +487,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gatts_exchange_mtu_reply(uint16_t conn_h
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_all_service_discovery(uint16_t conn_handle)
+OPERATE_RET tkl_ble_gattc_all_service_discovery(uint16_t conn_handle)
 {
+    printf("tkl_ble_gattc_all_service_discovery\n");
     return OPRT_OK;
 }
 
@@ -600,8 +503,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_all_service_discovery(uint16_t con
  * @Note:   For Tuya Service, it may contains more optional service, it is more better to find all Characteristic
  *          instead of find specific uuid.
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_all_char_discovery(uint16_t conn_handle, uint16_t start_handle, uint16_t end_handle)
+OPERATE_RET tkl_ble_gattc_all_char_discovery(uint16_t conn_handle, uint16_t start_handle, uint16_t end_handle)
 {
+    printf("tkl_ble_gattc_all_char_discovery\n");
     return OPRT_OK;
 }
 
@@ -614,8 +518,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_all_char_discovery(uint16_t conn_h
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_char_desc_discovery(uint16_t conn_handle, uint16_t start_handle, uint16_t end_handle)
+OPERATE_RET tkl_ble_gattc_char_desc_discovery(uint16_t conn_handle, uint16_t start_handle, uint16_t end_handle)
 {
+    printf("tkl_ble_gattc_char_desc_discovery\n");
     return OPRT_OK;
 }
 
@@ -628,8 +533,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_char_desc_discovery(uint16_t conn_
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_write_without_rsp(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
+OPERATE_RET tkl_ble_gattc_write_without_rsp(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
 {
+    printf("tkl_ble_gattc_write_without_rsp\n");
     return OPRT_OK;
 }
 
@@ -642,8 +548,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_write_without_rsp(uint16_t conn_ha
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_write(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
+OPERATE_RET tkl_ble_gattc_write(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length)
 {
+    printf("tkl_ble_gattc_write\n");
     return OPRT_OK;
 }
 
@@ -654,8 +561,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_write(uint16_t conn_handle, uint16
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_read(uint16_t conn_handle, uint16_t char_handle)
+OPERATE_RET tkl_ble_gattc_read(uint16_t conn_handle, uint16_t char_handle)
 {
+    printf("tkl_ble_gattc_read\n");
     return OPRT_OK;
 }
 
@@ -666,8 +574,9 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_read(uint16_t conn_handle, uint16_
  * @return  SUCCESS
  *          ERROR
  * */
-TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_exchange_mtu_request(uint16_t conn_handle, uint16_t client_rx_mtu)
+OPERATE_RET tkl_ble_gattc_exchange_mtu_request(uint16_t conn_handle, uint16_t client_rx_mtu)
 {
+    printf("tkl_ble_gattc_exchange_mtu_request\n");
     return OPRT_OK;
 }
 
@@ -696,6 +605,8 @@ TUYA_WEAK_ATTRIBUTE OPERATE_RET tkl_ble_gattc_exchange_mtu_request(uint16_t conn
  * */
 OPERATE_RET tkl_ble_vendor_command_control(uint16_t opcode, void *user_data, uint16_t data_len)
 {
+    printf("tkl_ble_vendor_command_control\n");
+    return OPRT_OK;
 }
 
 
