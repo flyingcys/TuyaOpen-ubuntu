@@ -24,12 +24,104 @@ static Agent *agent = NULL;
 static TKL_BLE_GAP_EVT_FUNC_CB  __gap_evt_cb  = NULL;
 static TKL_BLE_GATT_EVT_FUNC_CB __gatt_evt_cb = NULL;
 
+////////////////////////////////////////////////
+//管理 characteristic 到 uuid(16bits) 的映射关系
+////////////////////////////////////////////////
+// 这是一个简单的结构体，用于存储 UUID 字符串和对应的序号
+typedef struct {
+    const char* uuid_str;
+    uint16_t    index;
+} ServCharMapEntry;
 
+// 全局静态变量，用于存储映射表和当前分配的序号
+// 假设最大特征值数量不会超过某个预设值，例如 32
+#define MAX_SERVS 10
+#define MAX_CHARS 32
+static ServCharMapEntry serv_map[MAX_SERVS];
+static ServCharMapEntry char_map[MAX_CHARS];
+static uint16_t serv_count = 0;
+static uint16_t char_count = 0;
+
+static uint16_t _add_serv_info(const char *serv_uuid_str) {
+    // 将 UUID 和序号存入映射表
+    uint16_t service_index = 0xFFFF;
+    if (serv_count < MAX_SERVS) {
+        service_index = serv_count;
+
+        serv_map[serv_count].uuid_str = g_strdup(serv_uuid_str); // 复制字符串，因为稍后会被释放
+        serv_map[serv_count].index = service_index; 
+        log_debug("SET GATT", "serv uuid index: %d", serv_count);
+        serv_count++;
+    } else {
+        log_error("SET GATT", "Max service count exceeded!");
+    }
+    return service_index;
+}
+static uint16_t _add_char_info(const char *char_uuid_str) {
+    // 将 UUID 和序号存入映射表
+    uint16_t characteristic_index = 0xFFFF;
+    if (char_count < MAX_CHARS) {
+        characteristic_index = char_count+serv_count*10;   // 两位数，十位表示服务索引，个位表示特征索引
+
+        char_map[char_count].uuid_str = g_strdup(char_uuid_str); // 复制字符串，因为 char_uuid_str 稍后会被释放
+        char_map[char_count].index = characteristic_index; 
+        log_debug("SET GATT", "char uuid index: %d", char_count);
+        char_count++;
+    } else {
+        log_error("SET GATT", "Max characteristic count exceeded!");
+    }
+    return characteristic_index;
+}
+static uint16_t _get_serv_index_by_uuid(const char *serv_uuid) {
+    uint16_t service_index = 0xFFFF; // 使用一个无效值作为默认值
+
+    // 遍历映射表以查找 UUID
+    for (int i = 0; i < serv_count; i++) {
+        if (g_strcmp0(serv_map[i].uuid_str, serv_uuid) == 0) {
+            service_index = serv_map[i].index;
+            break;
+        }
+    }
+
+    return service_index;
+}
+static uint16_t _get_char_index_by_uuid(const char *char_uuid) {
+    uint16_t characteristic_index = 0xFFFF; // 使用一个无效值作为默认值
+
+    // 遍历映射表以查找 UUID
+    for (int i = 0; i < char_count; i++) {
+        if (g_strcmp0(char_map[i].uuid_str, char_uuid) == 0) {
+            characteristic_index = char_map[i].index;
+            break;
+        }
+    }
+
+    return characteristic_index;
+}
+static char * _get_serv_uuid_by_char_index(uint16_t char_index) {
+    uint16_t serv_index = char_index / 10;
+    for (int i = 0; i < serv_count; i++) {
+        if (serv_map[i].index == serv_index) {
+            return serv_map[i].uuid_str;
+        }
+    }
+    return NULL;
+}
+static char * _get_char_uuid_by_char_index(uint16_t char_index) {
+    for (int i = 0; i < char_count; i++) {
+        if (char_map[i].index == char_index) {
+            return char_map[i].uuid_str;
+        }
+    }
+    return NULL;   
+}
+////////////////////////////////////////////////
 
 static void on_powered_state_changed(Adapter *adapter, gboolean state) {
     log_debug(TAG, "powered '%s' (%s)", state ? "on" : "off", binc_adapter_get_path(adapter));
 }
 
+#define BLE_CONN_HANDLE 0x0001
 static void on_central_state_changed(Adapter *adapter, Device *device) {
     char *deviceToString = binc_device_to_string(device);
     log_debug(TAG, deviceToString);
@@ -41,6 +133,24 @@ static void on_central_state_changed(Adapter *adapter, Device *device) {
         binc_adapter_stop_advertising(adapter, advertisement);
     } else if (state == BINC_DISCONNECTED){
         binc_adapter_start_advertising(adapter, advertisement);
+    }
+    
+
+    // callback
+    TKL_BLE_GAP_PARAMS_EVT_T event;
+    memset(&event, 0, SIZEOF(TKL_BLE_GAP_PARAMS_EVT_T));
+     
+    event.result = 0;
+    if (state == BINC_CONNECTED) {
+        event.type = TKL_BLE_GAP_EVT_CONNECT;
+    } else if (state == BINC_DISCONNECTED){
+        event.type = TKL_BLE_GAP_EVT_DISCONNECT;
+    }
+    event.conn_handle = BLE_CONN_HANDLE;
+    event.gap_event.connect.role = TKL_BLE_ROLE_SERVER;
+
+    if (__gap_evt_cb) {
+        __gap_evt_cb(&event);
     }
 }
 
@@ -59,7 +169,7 @@ static const char *on_local_char_read(const Application *application, const char
     gatt_evt.type = TKL_BLE_GATT_EVT_READ_CHAR_VALUE;   
     gatt_evt.conn_handle = 0;
     gatt_evt.result = 0;
-    gatt_evt.gatt_event.char_read.char_handle = 0;
+    gatt_evt.gatt_event.char_read.char_handle = _get_char_index_by_uuid(char_uuid);
     gatt_evt.gatt_event.char_read.offset = 0;
 
     if (__gatt_evt_cb != NULL) {
@@ -81,7 +191,7 @@ static const char *on_local_char_write(const Application *application, const cha
     gatt_evt.type = TKL_BLE_GATT_EVT_WRITE_REQ;   
     gatt_evt.conn_handle = 0;
     gatt_evt.result = 0;
-    gatt_evt.gatt_event.write_report.char_handle = 0;
+    gatt_evt.gatt_event.write_report.char_handle = _get_char_index_by_uuid(char_uuid);
     gatt_evt.gatt_event.write_report.report.p_data = byteArray->data;
     gatt_evt.gatt_event.write_report.report.length = byteArray->len;
 
@@ -279,6 +389,10 @@ static void parse_and_update_adv_data(Advertisement *advertisement, TKL_BLE_DATA
 void bluez_inc_update_adv(TKL_BLE_DATA_T const *p_adv, TKL_BLE_DATA_T const *p_scan_rsp) {
     log_debug("UPDATE ADV", "begin");
 
+    // 尝试获取当前正在运行的广告对象
+    advertisement = binc_adapter_get_advertisement(default_adapter);
+    log_debug("UPDATE ADV", "get advertisement=%x", advertisement);
+
     if (advertisement == NULL) {
         log_debug("UPDATE ADV", "Advertisement object is not created. Creating one.");
         advertisement = binc_advertisement_create();
@@ -290,7 +404,7 @@ void bluez_inc_update_adv(TKL_BLE_DATA_T const *p_adv, TKL_BLE_DATA_T const *p_s
    
     
     // 如果广告正在运行，先停止它
-    binc_adapter_stop_advertising(default_adapter, advertisement);
+    //binc_adapter_stop_advertising(default_adapter, advertisement);
 
     // 解析并更新广播数据
     log_debug("UPDATE ADV", "Processing advertising data.");
@@ -307,6 +421,30 @@ void bluez_inc_update_adv(TKL_BLE_DATA_T const *p_adv, TKL_BLE_DATA_T const *p_s
     binc_adapter_start_advertising(default_adapter, advertisement);
 
     log_debug("UPDATE ADV", "end");
+}
+
+void bluez_inc_start_adv(void){
+    log_debug("START ADV", "begin");
+
+    // 尝试获取当前正在运行的广告对象
+    advertisement = binc_adapter_get_advertisement(default_adapter);
+    log_debug("UPDATE ADV", "get advertisement=%x", advertisement);
+
+    if (advertisement == NULL) {
+        log_debug("UPDATE ADV", "Advertisement object is not created. Creating one.");
+        advertisement = binc_advertisement_create();
+        if (advertisement == NULL) {
+            log_debug("UPDATE ADV", "Failed to create advertisement object.");
+            return;
+        }
+    }
+   
+    
+    // 如果广告正在运行，先停止它
+    //binc_adapter_stop_advertising(default_adapter, advertisement);
+    // 重新启动广播以应用新的配置
+    binc_adapter_start_advertising(default_adapter, advertisement);
+    log_debug("UPDATE ADV", "end");   
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -390,8 +528,16 @@ void bluez_inc_add_gatt(TKL_BLE_GATTS_PARAMS_T *p_service) {
                 free(char_uuid_str);
                 continue;
             }
+
+            // 将 UUID 和序号存入映射表
+            // 同时将 index 作为 handle 给上层（通过 p_svc 指针）
+            p_svc->p_char[j].handle = _add_char_info(char_uuid_str);
+
             free(char_uuid_str);
         }
+
+        // 将 SERVICE 和序号存入映射表
+        _add_serv_info(service_uuid_str);
         free(service_uuid_str); 
     }
 
@@ -406,6 +552,20 @@ void bluez_inc_add_gatt(TKL_BLE_GATTS_PARAMS_T *p_service) {
     binc_adapter_register_application(default_adapter, app);
 
     log_debug("SET GATT", "end");
+}
+
+int bluez_inc_gatt_value_notify(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length) {
+    char * serv_uuid_str = _get_serv_uuid_by_char_index(char_handle);
+    char * char_uuid_str = _get_char_uuid_by_char_index(char_handle);
+    if (serv_uuid_str && char_uuid_str) {
+        log_debug("GATT_NOTIFY", "serv_uuid=%s, char_uuid=%s", serv_uuid_str, char_uuid_str);
+        GByteArray *byteArray = g_byte_array_sized_new(length);
+        g_byte_array_append(byteArray, p_data, length);
+        binc_application_notify(app, serv_uuid_str, char_uuid_str, byteArray);
+        g_byte_array_free(byteArray, TRUE);   
+        return 0;//OPRT_OK
+    }
+    return -2;//OPRT_INVALID_PARM
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -425,8 +585,11 @@ void* _thread_function(void* arg) {
     return NULL;
 }
 
-void bluez_inc_init(TKL_BLE_GAP_EVT_FUNC_CB gap_evt_cb, TKL_BLE_GATT_EVT_FUNC_CB gatt_evt_cb)
-{
+static bool is_bluez_inc_init = false;
+void bluez_inc_init(TKL_BLE_GAP_EVT_FUNC_CB gap_evt_cb, TKL_BLE_GATT_EVT_FUNC_CB gatt_evt_cb){
+    if (is_bluez_inc_init) return;
+    is_bluez_inc_init = true;
+
     __gap_evt_cb = gap_evt_cb;
     __gatt_evt_cb = gatt_evt_cb;
 

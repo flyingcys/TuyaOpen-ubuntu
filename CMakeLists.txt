@@ -90,8 +90,9 @@ endif()
 if(CONFIG_ENABLE_BLUETOOTH)
     file(GLOB_RECURSE BT_SRC "tuyaos_adapter/src/tkl_bt/bluez_inc/binc/*.c")
     list(APPEND BT_SRC 
-        "tuyaos_adapter/src/tkl_bt/tkl_bt.c"
+        "tuyaos_adapter/src/tkl_bt/tkl_bluetooth.c"
         "tuyaos_adapter/src/tkl_bt/bt_dbus_api.c"
+        "tuyaos_adapter/src/tkl_bt/bt_hci_adv_api.c"
     )
 
     set(BLUETOOTH_INC)
@@ -205,6 +206,7 @@ if(CONFIG_ENABLE_BLUETOOTH)
         -L${TUYAOS_LIB_DIR}
         tuyaos
         dbus-1
+        bluetooth
         ${GLIB_LIBRARIES}
     )
     
