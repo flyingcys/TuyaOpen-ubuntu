@@ -67,6 +67,7 @@ OPERATE_RET tkl_ble_stack_deinit(uint8_t role)
 {
     printf("tkl_ble_stack_deinit, role=%d",role);
     bluez_inc_deinit();
+    return OPRT_OK;
 }
 
 /**
@@ -90,7 +91,6 @@ OPERATE_RET tkl_ble_gap_callback_register(const TKL_BLE_GAP_EVT_FUNC_CB gap_evt)
 {
     printf("tkl_ble_gap_callback_register\n");      
     __gap_evt_cb = gap_evt;
-
     return OPRT_OK;
 }
 
@@ -140,13 +140,34 @@ OPERATE_RET tkl_ble_gap_address_get(TKL_BLE_GAP_ADDR_T *p_peer_addr)
  * @return  SUCCESS
  *  ERROR
  * */ 
+static uint16_t sg_min_adv_interval, sg_max_adv_interval; 
+void binc_start_adv_success_cb(void) {
+    tuya_hci_le_set_adv_enable(0);
+    tuya_hci_le_set_adv_params(sg_min_adv_interval, sg_max_adv_interval, 0);
+    tuya_hci_le_set_adv_enable(1);
+}
 OPERATE_RET tkl_ble_gap_adv_start(TKL_BLE_GAP_ADV_PARAMS_T const *p_adv_params)
 {
-   printf("tkl_ble_gap_adv_start\n");
-    tuya_hci_le_set_adv_params(p_adv_params->adv_interval_min, p_adv_params->adv_interval_max, p_adv_params->adv_type);
+	printf("tkl_ble_gap_adv_start\n");
+    printf("tkl_ble_gap_adv_start:interval(%d,%d),type:%d", p_adv_params->adv_interval_min, p_adv_params->adv_interval_max, p_adv_params->adv_type);
+    #if 0
+    0x00	Public Device Address (公共地址，即 hciconfig 显示的地址)
+    0x01	Random Device Address (随机地址)
+    0x02	Resolvable Private Address (使用公共地址)
+    0x03	Resolvable Private Address (使用随机地址)
+    如果这个字段没有被显式设置为 0x00，它可能会默认为一个无效值（例如 0x00 但由于某些实现差异导致无效），或者控制器可能预期使用随机地址但您的程序没有设置。
+    #endif
 
-    tuya_hci_le_set_adv_enable(1);
-   return OPRT_OK; 
+    // 1）需要启动 bluetoothd 的 adv 否则连接不上（因为 bluetoothd 在连接时会检查）
+    // 2）hci 设置广播和响应包时无关广播是否使能，但是在设置广播间隔时一定要先关再开
+    // 3）bluetoothd 的 adv 初始化包括广播间隔的设置，属于异步的，因此需要等其完全执行完再 hci 相关的 adv 配置，否则广播间隔会被覆盖
+    //     - 实践发现加 delay 不行    // usleep(100 * 1000); // 暂停 100,000 微秒 = 100 毫秒
+    //     - 在 binc/adapter.c 中找到广播执行成功的回调函数
+    sg_min_adv_interval = p_adv_params->adv_interval_min;
+    sg_max_adv_interval = p_adv_params->adv_interval_max;
+    bluez_inc_start_adv();
+
+    return OPRT_OK;
 }
 
 /**
@@ -193,7 +214,6 @@ OPERATE_RET tkl_ble_gap_adv_rsp_data_set(TKL_BLE_DATA_T const *p_adv, TKL_BLE_DA
     bluez_inc_update_adv(p_adv, p_scan_rsp);
     //bluez_inc_set_adv();
 #else
-    bluez_inc_start_adv();
     tuya_hci_le_set_adv_data(p_adv->p_data, p_adv->length);
     tuya_hci_le_set_scan_rsp_data(p_scan_rsp->p_data, p_scan_rsp->length);
 #endif
@@ -230,7 +250,9 @@ OPERATE_RET tkl_ble_gap_adv_rsp_data_update(TKL_BLE_DATA_T const *p_adv, TKL_BLE
 
     return OPRT_OK;
 #else
-    return tuya_hci_le_set_scan_rsp_data(p_scan_rsp->p_data, p_scan_rsp->length);
+    tuya_hci_le_set_adv_data(p_adv->p_data, p_adv->length);
+    tuya_hci_le_set_scan_rsp_data(p_scan_rsp->p_data, p_scan_rsp->length);
+    return OPRT_OK;
 #endif
 }
 
@@ -279,6 +301,8 @@ OPERATE_RET tkl_ble_gap_connect(TKL_BLE_GAP_ADDR_T const *p_peer_addr, TKL_BLE_G
 OPERATE_RET tkl_ble_gap_disconnect(uint16_t conn_handle, uint8_t hci_reason)
 {
     printf("tkl_ble_gap_disconnect");               
+    bluez_inc_disconnect();
+    return OPRT_OK;
 }
 
 /**
@@ -409,8 +433,7 @@ OPERATE_RET tkl_ble_gatts_service_add(TKL_BLE_GATTS_PARAMS_T *p_service)
     }
 #endif
     bluez_inc_add_gatt(p_service);
-
-    return  OPRT_OK;
+    return OPRT_OK;
 }
 
 /**

@@ -122,6 +122,7 @@ static void on_powered_state_changed(Adapter *adapter, gboolean state) {
 }
 
 #define BLE_CONN_HANDLE 0x0001
+static Device *sg_device = NULL;
 static void on_central_state_changed(Adapter *adapter, Device *device) {
     char *deviceToString = binc_device_to_string(device);
     log_debug(TAG, deviceToString);
@@ -130,9 +131,12 @@ static void on_central_state_changed(Adapter *adapter, Device *device) {
     log_debug(TAG, "remote central %s is %s", binc_device_get_address(device), binc_device_get_connection_state_name(device));
     ConnectionState state = binc_device_get_connection_state(device);
     if (state == BINC_CONNECTED) {
+        sg_device = device;
         binc_adapter_stop_advertising(adapter, advertisement);
     } else if (state == BINC_DISCONNECTED){
-        binc_adapter_start_advertising(adapter, advertisement);
+        sg_device = NULL;
+        // binc_adapter_start_advertising(adapter, advertisement);
+        // 连接之后的停止广播由底层控制；断开后的开启广播由上层控制
     }
     
 
@@ -447,6 +451,13 @@ void bluez_inc_start_adv(void){
     log_debug("UPDATE ADV", "end");   
 }
 
+void bluez_inc_disconnect(void){
+    log_debug("DISCONNECT", "begin");
+    if (sg_device != NULL) {
+        binc_device_disconnect(sg_device);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////
 // 3. GATT 相关
 // 辅助函数：将 TKL_BLE_UUID_T 转换为 C 字符串（使用动态内存分配，更安全）
@@ -617,9 +628,9 @@ void bluez_inc_init(TKL_BLE_GAP_EVT_FUNC_CB gap_evt_cb, TKL_BLE_GATT_EVT_FUNC_CB
         }
 
         // Register an agent and set callbacks
-        agent = binc_agent_create(default_adapter, "/org/bluez/BincAgent", KEYBOARD_DISPLAY);
-        binc_agent_set_request_authorization_cb(agent, &on_request_authorization);
-        binc_agent_set_request_passkey_cb(agent, &on_request_passkey);
+        // agent = binc_agent_create(default_adapter, "/org/bluez/BincAgent", KEYBOARD_DISPLAY);
+        // binc_agent_set_request_authorization_cb(agent, &on_request_authorization);
+        // binc_agent_set_request_passkey_cb(agent, &on_request_passkey);
 
         // Setup remote central connection state callback
         binc_adapter_set_remote_central_cb(default_adapter, &on_central_state_changed);
@@ -630,7 +641,8 @@ void bluez_inc_init(TKL_BLE_GAP_EVT_FUNC_CB gap_evt_cb, TKL_BLE_GATT_EVT_FUNC_CB
     }
 
     // Bail out after some time
-    g_timeout_add_seconds(600, callback, loop);
+    // 600s 后回收资源
+    // g_timeout_add_seconds(600, callback, loop);
 
     // Using thread to run mainloop
     pthread_create(&my_thread_id, NULL, _thread_function, NULL);

@@ -382,6 +382,14 @@ static int process_alive(char *process)
     return ret;
 }
 
+static void process_kill_if_running(char *proc)
+{
+    int alive = process_alive(proc);
+    if (alive != 0) {
+        process_kill(proc);
+    }
+}
+
 
 int wifi_scan_ap(char *ifname , AP_IF_S *aps , int max_ap)
 {
@@ -918,6 +926,9 @@ int wifi_ap_start(char *ifname, WF_AP_CFG_IF_S *cfg)
     char ipaddr_pre[13] = {0x0};
     UDHCPD_IP_T udhcpd_ip_t = {{0}};
 
+    process_kill_if_running("hostapd");
+    process_kill_if_running("udhcpd");
+
     ret = hostapd_conf_prepare(cfg);
     if(ret < 0) {
         TKL_LOGE("WIFI prepare hostapd.conf failed");
@@ -1038,4 +1049,3 @@ int wifi_recv_rawpacket(int rawsock, unsigned char *pkt, int pkt_len)
 
     return recv;
 }
-

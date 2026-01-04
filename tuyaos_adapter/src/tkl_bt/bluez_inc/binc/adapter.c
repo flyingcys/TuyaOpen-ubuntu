@@ -1079,6 +1079,8 @@ static void binc_internal_start_advertising_cb(__attribute__((unused)) GObject *
         g_clear_error(&error);
     } else {
         log_debug(TAG, "started advertising (%s)", adapter->address);
+        extern void binc_start_adv_success_cb(void);
+        binc_start_adv_success_cb();
     }
 }
 

@@ -35,7 +35,7 @@ project(TuyaOpen)
 
 # Set a default build type if none was specified, and print it
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build: Debug, Release, RelWithDebInfo, MinSizeRel" FORCE)
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Choose the type of build: Debug, Release, RelWithDebInfo, MinSizeRel" FORCE)
 endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
@@ -43,7 +43,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 add_compile_options(-fdiagnostics-color=always)
 
 # Add an option to enable AddressSanitizer (ASan)
-option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(ENABLE_ASAN "Enable AddressSanitizer" ON)
 
 if(ENABLE_ASAN)
     if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -173,36 +173,36 @@ endif()
 
 if(ENABLE_ASAN)
     target_compile_options(${CONFIG_PROJECT_NAME} PRIVATE -fsanitize=address)
-    target_link_libraries(${CONFIG_PROJECT_NAME} PRIVATE -fsanitize=address)
+    target_link_options(${CONFIG_PROJECT_NAME} PRIVATE -fsanitize=address)
 endif()
 
-target_link_libraries(${CONFIG_PROJECT_NAME}
+target_link_libraries(${CONFIG_PROJECT_NAME} PRIVATE
     -L${OPEN_LIBS_DIR}
     pthread
 )
 
 if(NOT DEFINED CONFIG_COMPILE_PREX OR "${CONFIG_COMPILE_PREX}" STREQUAL "")
-    target_link_libraries(${CONFIG_PROJECT_NAME}
+    target_link_libraries(${CONFIG_PROJECT_NAME} PRIVATE
         systemd
     )
 endif()
 
 if(PLATFORM_NEED_LIBS)
     string(REPLACE " " ";" LIBS_LIST "${PLATFORM_NEED_LIBS}")
-    target_link_libraries(${CONFIG_PROJECT_NAME}
+    target_link_libraries(${CONFIG_PROJECT_NAME} PRIVATE
         ${LIBS_LIST}
     )
 endif()
 
 # Link math library after all other libraries to resolve dependencies
-target_link_libraries(${CONFIG_PROJECT_NAME} m)
+target_link_libraries(${CONFIG_PROJECT_NAME} PRIVATE m)
 
 if(CONFIG_ENABLE_BLUETOOTH)
     # Use pkg-config to find GLib and GIO libraries
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GLIB REQUIRED glib-2.0 gio-2.0)
     
-    target_link_libraries(${CONFIG_PROJECT_NAME}
+    target_link_libraries(${CONFIG_PROJECT_NAME} PRIVATE
         -L${TUYAOS_LIB_DIR}
         tuyaos
         dbus-1
