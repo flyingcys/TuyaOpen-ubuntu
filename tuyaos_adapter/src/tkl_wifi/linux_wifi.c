@@ -62,6 +62,10 @@ int wifi_get_ip(char *ifname, char *ip)
     struct ifreq ifr;
     struct sockaddr_in *sin;
 
+    if (ip != NULL) {
+        ip[0] = '\0';
+    }
+
     fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
         TKL_LOGE("create socket err : %s",strerror(errno));
@@ -80,6 +84,10 @@ int wifi_get_ip(char *ifname, char *ip)
     /* get ip */
     strcpy(ifr.ifr_name, ifname);
     if (ioctl(fd, SIOCGIFADDR, &ifr) <0 ) {
+        if (errno == EADDRNOTAVAIL) {
+            close(fd);
+            return 1;
+        }
         TKL_LOGE("socket ioctl err : %s",strerror(errno));
         close(fd);
         return -1;

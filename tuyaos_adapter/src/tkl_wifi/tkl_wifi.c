@@ -220,6 +220,8 @@ OPERATE_RET tkl_wifi_get_ip(WF_IF_E wf, NW_IP_S *ip)
         return OPRT_COM_ERROR;
     }
 
+    memset(ip, 0, sizeof(NW_IP_S));
+
     //! TODO:
     if (WF_AP == wf) {
         *ip = s_tkl_wifi.apcfg.ip;
@@ -230,8 +232,10 @@ OPERATE_RET tkl_wifi_get_ip(WF_IF_E wf, NW_IP_S *ip)
 
     /* get ip */
     ret = wifi_get_ip(ifname, ip->ip);
-    if (ret != 0){
-        // TKL_LOGE("wifi get ip failed %d", ret);
+    if (ret == 1) {
+        return OPRT_OK;
+    }
+    if (ret != 0) {
         return OPRT_COM_ERROR;
     }
     /* get mask */
@@ -566,6 +570,11 @@ OPERATE_RET tkl_wifi_station_get_status(WF_STATION_STAT_E *stat)
 
     if(mode != WIFI_MODE_MANAGED) {
         TKL_LOGE("get wifi work status only in station mode");
+        *stat = WSS_IDLE;
+        return 0;
+    }
+
+    if (access(WIFI_WPA_CTRL_PATH, F_OK) != 0) {
         *stat = WSS_IDLE;
         return 0;
     }
