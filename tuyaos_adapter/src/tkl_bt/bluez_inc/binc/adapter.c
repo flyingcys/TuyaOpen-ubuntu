@@ -99,6 +99,7 @@ struct binc_adapter {
     GHashTable *devices_cache; // Owned
 
     Advertisement *advertisement; // Borrowed
+    gboolean advertising;
 };
 
 static void remove_signal_subscribers(Adapter *adapter) {
@@ -1076,8 +1077,10 @@ static void binc_internal_start_advertising_cb(__attribute__((unused)) GObject *
 
     if (error != NULL) {
         log_error(TAG, "failed to register advertisement (error %d: %s)", error->code, error->message);
+        adapter->advertising = FALSE;
         g_clear_error(&error);
     } else {
+        adapter->advertising = TRUE;
         log_debug(TAG, "started advertising (%s)", adapter->address);
         extern void binc_start_adv_success_cb(void);
         binc_start_adv_success_cb();
@@ -1088,7 +1091,13 @@ void binc_adapter_start_advertising(Adapter *adapter, Advertisement *advertiseme
     g_assert(adapter != NULL);
     g_assert(advertisement != NULL);
 
+    if (adapter->advertising) {
+        log_debug(TAG, "advertising already active or pending, skip start");
+        return;
+    }
+
     adapter->advertisement = advertisement;
+    adapter->advertising = TRUE;
     binc_advertisement_register(advertisement, adapter);
 
     g_dbus_connection_call(binc_adapter_get_dbus_connection(adapter),
@@ -1119,9 +1128,11 @@ static void binc_internal_stop_advertising_cb(__attribute__((unused)) GObject *s
 
     if (error != NULL) {
         log_error(TAG, "failed to unregister advertisement (error %d: %s)", error->code, error->message);
+        adapter->advertising = FALSE;
         g_clear_error(&error);
     } else {
         binc_advertisement_unregister(adapter->advertisement, adapter);
+        adapter->advertising = FALSE;
         log_debug(TAG, "stopped advertising");
     }
 

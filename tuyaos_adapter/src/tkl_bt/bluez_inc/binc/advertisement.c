@@ -156,6 +156,11 @@ void binc_advertisement_register(Advertisement *advertisement, const Adapter *ad
     g_assert(advertisement != NULL);
     g_assert(adapter != NULL);
 
+    if (advertisement->registration_id != 0) {
+        log_debug(TAG, "advertisement already registered on dbus, skip register");
+        return;
+    }
+
     static const char legacy_advertisement_xml[] =
             "<node name='/'>"
             "   <interface name='org.bluez.LEAdvertisement1'>"
@@ -215,11 +220,17 @@ void binc_advertisement_unregister(Advertisement *advertisement, const Adapter *
     g_assert(advertisement != NULL);
     g_assert(adapter != NULL);
 
+    if (advertisement->registration_id == 0) {
+        log_debug(TAG, "advertisement not registered on dbus, skip unregister");
+        return;
+    }
+
     gboolean result = g_dbus_connection_unregister_object(binc_adapter_get_dbus_connection(adapter),
                                                           advertisement->registration_id);
     if (!result) {
         log_debug(TAG, "failed to unregister advertisement");
     }
+    advertisement->registration_id = 0;
 }
 
 static void byte_array_free(GByteArray *byteArray) { g_byte_array_free(byteArray, TRUE); }
