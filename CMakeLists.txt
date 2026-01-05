@@ -43,7 +43,12 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 add_compile_options(-fdiagnostics-color=always)
 
 # Add an option to enable AddressSanitizer (ASan)
-option(ENABLE_ASAN "Enable AddressSanitizer" ON)
+# ASan can fail to reserve shadow memory on some ARM64 kernels (e.g., Raspberry Pi).
+set(DEFAULT_ENABLE_ASAN ON)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm|armv7l|armv8l)$")
+    set(DEFAULT_ENABLE_ASAN OFF)
+endif()
+option(ENABLE_ASAN "Enable AddressSanitizer" ${DEFAULT_ENABLE_ASAN})
 
 if(ENABLE_ASAN)
     if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE MATCHES "Debug")

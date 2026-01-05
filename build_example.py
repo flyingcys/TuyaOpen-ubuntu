@@ -9,6 +9,8 @@ import sys
 import json
 import subprocess
 import shutil
+import errno
+import tempfile
 
 def clean(root):
     shutil.rmtree("build", ignore_errors=True)
@@ -67,6 +69,33 @@ def check_dependency_changes(build_param_path, build_dir="build"):
         print(f"Error occurred during dependency check: {e}")
         return True  # Rebuild on error
 
+def safe_copy(src, dst):
+    dst_dir = os.path.dirname(dst)
+    os.makedirs(dst_dir, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=os.path.basename(dst) + ".tmp.", dir=dst_dir)
+    os.close(fd)
+    try:
+        shutil.copyfile(src, tmp_path)
+        os.replace(tmp_path, dst)
+        shutil.copymode(src, dst)
+    except OSError as e:
+        if e.errno == errno.ETXTBSY:
+            fallback = dst + ".new"
+            try:
+                os.replace(tmp_path, fallback)
+                shutil.copymode(src, fallback)
+                print(f"Warning: {dst} is busy, wrote {fallback} instead. Stop the running process and replace manually.")
+                return
+            except OSError:
+                pass
+        raise
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
 def main():
 
     if len(sys.argv) < 2:
@@ -116,10 +145,10 @@ def main():
         os.makedirs(dst_dir, exist_ok=True)
         
     destination_path = os.path.join(dst_dir, param_data['CONFIG_PROJECT_NAME'] + "_QIO_" + param_data['CONFIG_PROJECT_VERSION'] + ".bin")
-    shutil.copy(source_file, destination_path)
+    safe_copy(source_file, destination_path)
 
     destination_path = os.path.join(dst_dir, param_data['CONFIG_PROJECT_NAME'] + "_" + param_data['CONFIG_PROJECT_VERSION'] + ".elf")
-    shutil.copy(source_file, destination_path)
+    safe_copy(source_file, destination_path)
     
     sys.exit(0)
 

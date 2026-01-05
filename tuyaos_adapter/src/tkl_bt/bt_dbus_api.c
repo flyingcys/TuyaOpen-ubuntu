@@ -1,6 +1,7 @@
 #include <glib.h>
 #include <stdio.h>
 #include <signal.h>
+#include <unistd.h>
 #include "adapter.h"
 #include "device.h"
 #include "logger.h"
@@ -20,6 +21,7 @@ static Adapter *default_adapter = NULL;
 static Advertisement *advertisement = NULL;
 static Application *app = NULL;
 static Agent *agent = NULL;
+static volatile sig_atomic_t cleanup_in_progress = 0;
 
 static TKL_BLE_GAP_EVT_FUNC_CB  __gap_evt_cb  = NULL;
 static TKL_BLE_GATT_EVT_FUNC_CB __gatt_evt_cb = NULL;
@@ -244,30 +246,47 @@ static gboolean callback(gpointer data) {
         agent = NULL;
     }
 
-    if (app != NULL) {
-        binc_adapter_unregister_application(default_adapter, app);
-        binc_application_free(app);
-        app = NULL;
-    }
-
-    if (advertisement != NULL) {
-        binc_adapter_stop_advertising(default_adapter, advertisement);
-        binc_advertisement_free(advertisement);
-    }
-
     if (default_adapter != NULL) {
+        if (app != NULL) {
+            binc_adapter_unregister_application(default_adapter, app);
+            binc_application_free(app);
+            app = NULL;
+        }
+
+        if (advertisement != NULL) {
+            binc_adapter_stop_advertising(default_adapter, advertisement);
+            binc_advertisement_free(advertisement);
+            advertisement = NULL;
+        }
+
         binc_adapter_free(default_adapter);
         default_adapter = NULL;
+    } else {
+        if (app != NULL) {
+            binc_application_free(app);
+            app = NULL;
+        }
+        if (advertisement != NULL) {
+            binc_advertisement_free(advertisement);
+            advertisement = NULL;
+        }
     }
 
-    g_main_loop_quit((GMainLoop *) data);
+    if (data != NULL) {
+        g_main_loop_quit((GMainLoop *) data);
+    }
     return FALSE;
 }
 
 static void cleanup_handler(int signo) {
     if (signo == SIGINT) {
+        if (cleanup_in_progress) {
+            _exit(0);
+        }
+        cleanup_in_progress = 1;
         log_error(TAG, "received SIGINT");
         callback(loop);
+        _exit(0);
     }
 }
 
@@ -461,7 +480,7 @@ void bluez_inc_disconnect(void){
 ////////////////////////////////////////////////////////////////////////////////////
 // 3. GATT 相关
 // 辅助函数：将 TKL_BLE_UUID_T 转换为 C 字符串（使用动态内存分配，更安全）
-const char* uuid_to_string(const TKL_BLE_UUID_T* p_uuid) {
+char *uuid_to_string(const TKL_BLE_UUID_T* p_uuid) {
     // 动态分配内存，调用者有责任释放它
     char* uuid_str = (char*)malloc(40 * sizeof(char));
     if (!uuid_str) {
@@ -507,7 +526,7 @@ void bluez_inc_add_gatt(TKL_BLE_GATTS_PARAMS_T *p_service) {
         TKL_BLE_SERVICE_PARAMS_T *p_svc = &(p_service->p_service[i]);
 
         // 将服务的 UUID 转换为字符串
-        const char *service_uuid_str = uuid_to_string(&p_svc->svc_uuid);
+        char *service_uuid_str = uuid_to_string(&p_svc->svc_uuid);
         if (!service_uuid_str) {
             log_debug("SET GATT", "Invalid UUID type for service %d", i);
             continue;
@@ -526,7 +545,7 @@ void bluez_inc_add_gatt(TKL_BLE_GATTS_PARAMS_T *p_service) {
             TKL_BLE_CHAR_PARAMS_T *p_char = &(p_svc->p_char[j]);
 
             // 将特征值的 UUID 转换为字符串
-            const char *char_uuid_str = uuid_to_string(&p_char->char_uuid);
+            char *char_uuid_str = uuid_to_string(&p_char->char_uuid);
             if (!char_uuid_str) {
                 log_debug("SET GATT", "Invalid UUID type for characteristic %d of service %s", j, service_uuid_str);
                 continue;
@@ -651,4 +670,3 @@ void bluez_inc_init(TKL_BLE_GAP_EVT_FUNC_CB gap_evt_cb, TKL_BLE_GATT_EVT_FUNC_CB
 void bluez_inc_deinit(void){
     
 }
-

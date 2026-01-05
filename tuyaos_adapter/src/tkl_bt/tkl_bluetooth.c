@@ -16,6 +16,20 @@
 //#include "tuya_bluez_api.h"
 #include "tal_log.h"
 
+// Forward declarations for functions defined in bt_dbus_api.c
+void bluez_inc_init(TKL_BLE_GAP_EVT_FUNC_CB gap_evt_cb, TKL_BLE_GATT_EVT_FUNC_CB gatt_evt_cb);
+void bluez_inc_deinit(void);
+void bluez_inc_start_adv(void);
+void bluez_inc_disconnect(void);
+void bluez_inc_add_gatt(TKL_BLE_GATTS_PARAMS_T *p_service);
+int bluez_inc_gatt_value_notify(uint16_t conn_handle, uint16_t char_handle, uint8_t *p_data, uint16_t length);
+
+// Forward declarations for functions defined in bt_hci_adv_api.c
+int tuya_hci_le_set_adv_enable(bool enable);
+int tuya_hci_le_set_adv_params(uint16_t min_interval, uint16_t max_interval, uint8_t advtype);
+int tuya_hci_le_set_adv_data(uint8_t *p_data, uint8_t length);
+int tuya_hci_le_set_scan_rsp_data(uint8_t *p_data, uint8_t length);
+
 static TKL_BLE_GAP_EVT_FUNC_CB  __gap_evt_cb  = NULL;
 static TKL_BLE_GATT_EVT_FUNC_CB __gatt_evt_cb = NULL;
 
