@@ -9,8 +9,8 @@ int tuya_hci_le_set_adv_params(uint16_t min_interval, uint16_t max_interval, uin
     int device = 0;
     uint8_t status = 0;
 
-    min_interval = 32;
-    max_interval = 32;
+    // min_interval = 32;
+    // max_interval = 32;
     advtype = 1;
     printf("===== min_interval = %d, max_interval = %d, advtype = %d\r\n", min_interval, max_interval, advtype);
     device = hci_open_dev(hci_get_route(NULL));
